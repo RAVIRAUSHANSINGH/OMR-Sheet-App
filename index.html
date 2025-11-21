@@ -1,0 +1,175 @@
+<!--
+    Author: Ravi Raushan
+    Project: Mock OMR Sheet - A Dynamic OMR Sheet Generator and Grader
+    Date: November 2025
+    Version: 1.2
+    Description: A client-side web application that allows users to generate a custom OMR sheet,
+                 fill it out under a timer, and get it graded against a provided answer key.
+                 Features include custom marking schemes and the ability to save a detailed
+                 performance report as a high-quality, vector-based PDF.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mock OMR Sheet - Glass Edition</title>
+    
+    <!--  Using Tailwind for layout speed -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!--  Libraries for reading files and making PDFs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <!--  Nice font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!--  Our custom Glass styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="text-glass-dark p-4 md:p-8 min-h-screen flex justify-center">
+
+    <div class="container mx-auto max-w-5xl">
+        <!-- Header -->
+        <header class="text-center mb-10 fade-in">
+            <h1 class="text-4xl md:text-5xl font-extrabold text-white drop-shadow-lg">Mock OMR Sheet</h1>
+            <p class="text-white/90 text-lg mt-3 font-medium drop-shadow-md">Liquid Glass Edition. Generate, fill, and instantly check.</p>
+        </header>
+
+        <!-- Configuration Section: Where user sets up the test -->
+        <div id="config-section" class="glass-panel p-8 mb-8 fade-in" style="animation-delay: 0.1s;">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 items-end gap-6">
+                <div>
+                    <label for="question-count" class="font-bold text-sm text-glass-medium block mb-2 ml-1">Number of Questions*</label>
+                    <input type="number" id="question-count" class="glass-input w-full p-4 rounded-2xl transition-all" placeholder="e.g., 50" min="1" max="200">
+                </div>
+                 <div>
+                    <label for="correct-marks" class="font-bold text-sm text-glass-medium block mb-2 ml-1">Marks for Correct (Optional)</label>
+                    <input type="number" id="correct-marks" class="glass-input w-full p-4 rounded-2xl transition-all" placeholder="e.g., 4">
+                </div>
+                <div>
+                    <label for="wrong-marks" class="font-bold text-sm text-glass-medium block mb-2 ml-1">Marks for Wrong (Optional)</label>
+                    <input type="number" id="wrong-marks" class="glass-input w-full p-4 rounded-2xl transition-all" placeholder="e.g., -1">
+                </div>
+                <button id="generate-btn" class="w-full btn-liquid-blue text-white font-bold py-4 px-6 rounded-2xl transition-all transform active:scale-95">
+                    Generate Sheet
+                </button>
+            </div>
+             <p id="config-error" class="text-red-200 bg-red-900/50 p-3 rounded-xl text-sm mt-4 hidden backdrop-blur-md border border-red-500/30"></p>
+        </div>
+
+        <!-- OMR Sheet Section: Hidden until generated -->
+        <div id="omr-container" class="hidden fade-in" style="animation-delay: 0.2s;">
+            <div class="flex justify-between items-center mb-6 px-2">
+                <h2 class="text-2xl font-bold text-white drop-shadow-md">OMR Sheet</h2>
+                <div id="timer-display" class="text-xl font-bold bg-white/30 backdrop-blur-md text-white px-6 py-3 rounded-2xl shadow-glass-sm border border-white/40">00:00</div>
+            </div>
+            <div id="omr-sheet" class="glass-panel p-6 sm:p-10 space-y-2">
+                <!-- Questions will be inserted here by JS -->
+            </div>
+            
+            <!-- Bottom Actions: Upload Key, Grading, etc. -->
+            <div id="actions-panel" class="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-10">
+                
+                <!-- Left: Answer Key Upload -->
+                <div class="glass-panel p-8 fade-in" style="animation-delay: 0.3s;">
+                    <h3 class="font-bold text-2xl mb-6 text-glass-dark border-b border-white/30 pb-4">Check Your Answers</h3>
+                    <div id="status-message" class="hidden p-4 mb-6 rounded-2xl text-center font-bold backdrop-blur-md shadow-sm border"></div>
+                    
+                    <div class="space-y-6">
+                        <div>
+                            <label for="file-upload" class="block text-sm font-bold text-glass-medium mb-2 ml-1">Upload Answer Key</label>
+                            <input type="file" id="file-upload" class="block w-full text-sm text-glass-light file:mr-4 file:py-3 file:px-6 file:rounded-2xl file:border-0 file:text-sm file:font-bold file:bg-blue-500/20 file:text-blue-700 hover:file:bg-blue-500/30 cursor-pointer glass-input rounded-2xl" accept=".xlsx, .xls, .pdf">
+                            <p class="text-xs text-glass-light mt-2 ml-1">Accepts .xlsx, .xls, .pdf. <span class="font-bold cursor-pointer text-blue-600 hover:text-blue-800" onclick="showFormatInfo()">See format info.</span></p>
+                        </div>
+                        
+                        <div class="flex items-center my-6">
+                            <div class="flex-grow border-t border-white/30"></div>
+                            <span class="flex-shrink mx-6 text-glass-light text-sm font-bold">OR</span>
+                            <div class="flex-grow border-t border-white/30"></div>
+                        </div>
+
+                        <div>
+                            <label for="manual-key" class="block text-sm font-bold text-glass-medium mb-2 ml-1">Enter Key Manually</label>
+                            <input type="text" id="manual-key" class="glass-input w-full p-4 rounded-2xl transition-all font-mono tracking-widest" placeholder="e.g., ABCDABCDAB...">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Controls & Score Display -->
+                <div class="glass-panel p-8 flex flex-col justify-between fade-in" style="animation-delay: 0.4s;">
+                    <div>
+                        <h3 class="font-bold text-2xl mb-6 text-glass-dark border-b border-white/30 pb-4">Controls & Results</h3>
+                        <div id="results-display" class="hidden text-center mb-6">
+                            <p class="text-xl font-bold text-glass-medium mb-2">Your Score</p>
+                            <div class="inline-block bg-white/30 backdrop-blur-lg p-4 rounded-3xl shadow-glass-sm border border-white/50 mb-2">
+                                <p id="score" class="text-6xl font-extrabold text-blue-700 drop-shadow-sm">0 / 0</p>
+                                <p id="total-marks-info" class="text-sm text-glass-medium font-bold mt-1"></p>
+                            </div>
+                             <p id="time-taken-info" class="text-lg font-bold text-glass-dark mt-2 bg-blue-100/30 inline-block px-4 py-1 rounded-full"></p>
+                            <div class="mt-4 text-base flex justify-center gap-4 bg-white/20 p-3 rounded-2xl font-bold">
+                                <span id="correct-count" class="text-green-700">Correct: 0</span> <span class="text-white/40">|</span> 
+                                <span id="incorrect-count" class="text-red-700">Incorrect: 0</span> <span class="text-white/40">|</span>
+                                <span id="unanswered-count" class="text-glass-medium">Unanswered: 0</span>
+                            </div>
+                            <div id="marks-breakdown" class="hidden text-sm mt-4 text-glass-medium bg-white/25 p-3 rounded-2xl font-bold border border-white/30">
+                                <span id="correct-marks-total" class="text-green-800"></span>
+                                <span id="incorrect-marks-total" class="text-red-800"></span>
+                            </div>
+                        </div>
+                         <p id="check-error" class="text-red-100 bg-red-900/60 p-3 rounded-xl text-sm my-4 hidden backdrop-blur-md border border-red-500/30 text-center font-bold"></p>
+                    </div>
+
+                    <div class="flex flex-col gap-4 mt-6">
+                        <button id="check-btn" class="w-full btn-liquid-green text-white font-bold py-4 px-6 rounded-2xl transition-all transform active:scale-95 shadow-neon-green">
+                            Finish & Check
+                        </button>
+                        <button id="save-pdf-btn" class="hidden w-full btn-liquid-indigo text-white font-bold py-4 px-6 rounded-2xl transition-all transform active:scale-95 shadow-neon-blue">
+                            Save Full Report as PDF
+                        </button>
+                        <button id="reset-btn" class="w-full btn-liquid-slate text-white font-bold py-4 px-6 rounded-2xl transition-all transform active:scale-95">
+                            Start New Test
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modals (Popups) -->
+    <div id="format-modal" class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 hidden z-50 fade-in">
+        <div class="glass-panel p-10 max-w-md w-full border-2 border-white/50 shadow-glass">
+            <h2 class="text-3xl font-extrabold mb-6 text-glass-dark">Answer Key Format</h2>
+            <div class="space-y-5 text-glass-medium font-medium">
+                <p>Ensure your file matches these formats for automatic grading.</p>
+                 <div class="bg-white/30 p-4 rounded-xl border border-white/40">
+                    <h3 class="font-bold text-lg mb-2">Excel (.xlsx, .xls)</h3>
+                    <p class="text-sm">Two columns: Column A for Question No., Column B for Option (A-D).</p>
+                </div>
+                <div class="bg-white/30 p-4 rounded-xl border border-white/40">
+                    <h3 class="font-bold text-lg mb-2">PDF (.pdf)</h3>
+                    <p class="text-sm">Text format like "1. A", "2: C", etc., on separate lines.</p>
+                </div>
+            </div>
+            <button onclick="hideFormatInfo()" class="mt-8 w-full btn-liquid-blue text-white font-bold py-3 px-6 rounded-2xl transition-all transform active:scale-95">Got it!</button>
+        </div>
+    </div>
+
+    <div id="confirm-modal" class="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 hidden z-50 fade-in">
+        <div class="glass-panel p-10 max-w-md w-full text-center border-2 border-white/50 shadow-glass">
+            <h2 class="text-3xl font-extrabold mb-4 text-glass-dark">No Answer Key Provided</h2>
+            <p class="text-glass-medium mb-8 font-medium text-lg">Do you want to proceed without checking? You can still save your marked sheet as a PDF.</p>
+            <div class="flex justify-center gap-6">
+                <button id="confirm-yes-btn" class="btn-liquid-blue text-white font-bold py-3 px-10 rounded-2xl transition-all transform active:scale-95">Yes, Proceed</button>
+                <button id="confirm-no-btn" class="btn-liquid-slate text-white font-bold py-3 px-10 rounded-2xl transition-all transform active:scale-95">No, Go Back</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Our Logic Script -->
+    <script src="script.js"></script>
+</body>
+</html>
